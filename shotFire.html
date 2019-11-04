@@ -1,0 +1,429 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en">
+<head>
+  <meta http-equiv="Content-Type" content="text/html;charset=UTF-8">
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+    }
+
+    .city {
+      width: 100%;
+      position: fixed;
+      bottom: 0px;
+      z-index: 100;
+    }
+
+    .city img {
+      width: 100%;
+    }
+  </style>
+  <title>放烟花模拟</title>
+</head>
+<body onselectstart="return false">
+<canvas id='cas' style="background-color:rgba(0,5,24,1)">浏览器不支持canvas</canvas>
+<div class="city"><img src="city.png" alt=""/></div>
+<img src="moon.png" alt="" id="moon" style="visibility: hidden;"/>
+<div style="display:none">
+  <div class="shape">生日快乐</div>
+</div>
+<audio src="boom.mp3" preload="auto"></audio>
+<audio src="boom.mp3" preload="auto"></audio>
+<audio src="boom.mp3" preload="auto"></audio>
+<audio src="boom.mp3" preload="auto"></audio>
+<audio src="boom.mp3" preload="auto"></audio>
+<audio src="boom.mp3" preload="auto"></audio>
+<audio src="shotfire.mp3" preload="auto"></audio>
+<audio src="shotfire.mp3" preload="auto"></audio>
+<audio src="shotfire.mp3" preload="auto"></audio>
+<script>
+  var canvas = document.getElementById("cas");
+  var ocas = document.createElement("canvas");
+  var octx = ocas.getContext("2d");
+  var ctx = canvas.getContext("2d");
+  ocas.width = canvas.width = window.innerWidth;
+  ocas.height = canvas.height = window.innerHeight;
+  var bigbooms = [];
+
+  window.onload = function() {
+    initAnimate()
+  }
+
+  function initAnimate() {
+    // 绘制背景：星星
+    drawBg();
+
+    lastTime = new Date();
+    animate();
+  }
+
+  var lastTime;
+  function animate() {
+    // save()用来保存canvas的状态，restore()用来恢复canvas的状态。
+    // 如果不使用save和restore就会使第二次绘制建立在第一次绘制的基础上，这样第一次绘制可能会对第二次绘制造成一些影响
+    ctx.save();
+    // destination-out,在源图像外显示目标图像。只有源图像外的目标图像部分会被显示，源图像是透明的。
+    // 设置属性之后绘制的图像时源图像
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.globalAlpha = 0.1;
+    // 每一次动画开始前清除画布
+    // 不是清除画布，是画一个满屏的透明度为0.1的四边形来覆盖之前的画布,以实现拖尾效果
+    // 覆盖效果相当于在源图像范围内，目标图像（源图像绘制之前的图像）的透明度变为1-globalAlpha即0.9；若n次覆盖，透明度变为0.9^n
+    // 而源图像之后绘制的图形则不受影响，类似于实现淡出效果
+    // globalAlpha值越大，淡出越快，拖尾越短越不明显。反之则淡出越慢，拖尾越长越明显。
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.restore();
+
+    // 每过一段时间，填充烟花数组
+    var newTime = new Date();
+    if (newTime - lastTime > 200 + (window.innerHeight - 767) / 2) {
+      var random = Math.random() * 100 > 10 ? true : false;
+      var x = getRandom(canvas.width / 5, canvas.width * 4 / 5);
+      var y = getRandom(50, 200);
+      // random为true则发射普通烟花
+      if (random) {
+        var bigboom = new Boom(getRandom(canvas.width / 3, canvas.width * 2 / 3), 2, "#FFF", {x: x, y: y});
+        bigbooms.push(bigboom)
+      }
+      // random为false则发射文字烟花
+      else {
+        var bigboom = new Boom(getRandom(canvas.width / 3, canvas.width * 2 / 3), 2, "#FFF", {
+          x: canvas.width / 2,
+          y: 200
+        }, document.querySelectorAll(".shape")[parseInt(getRandom(0, document.querySelectorAll(".shape").length))]);
+        bigbooms.push(bigboom)
+      }
+      lastTime = newTime;
+    }
+
+    // 绘制星星
+    stars.foreach(function() {
+      this.paint();
+    })
+
+    // 绘制月亮
+    drawMoon();
+
+    // 绘制烟花
+    bigbooms.foreach(function(index) {
+      var that = this;
+      // 烟花爆炸之前
+      if (!this.dead) {
+        this._move();
+        this._drawLight();
+      }
+      // 烟花爆炸
+      else {
+        this.booms.foreach(function(index) {
+          if (!this.dead) {
+            this.moveTo();
+          }
+          else if (index === that.booms.length - 1) {
+            //最后一个烟花粒子死亡后，移除烟花头部
+            //此处为近似处理，最后一个烟花粒子不一定是最后死亡的
+            // todo：修改为一有粒子死亡就移除，以达到粒子同时消失的效果，同时可能需要修改粒子的爆炸范围
+            bigbooms.splice(bigbooms.indexOf(that), 1);
+          }
+        })
+      }
+    });
+
+    // 递归调用动画函数
+    raf(animate);
+  }
+
+  // 绘制月亮
+  function drawMoon() {
+    var moon = document.getElementById("moon");
+    var centerX = canvas.width - 200, centerY = 100, width = 80;
+    if (moon.complete) {
+      ctx.drawImage(moon, centerX, centerY, width, width)
+    }
+    else {
+      moon.onload = function() {
+        ctx.drawImage(moon, centerX, centerY, width, width)
+      }
+    }
+    var index = 0;
+    for (var i = 0; i < 10; i++) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(centerX + width / 2, centerY + width / 2, width / 2 + index, 0, 2 * Math.PI);
+      ctx.fillStyle = "rgba(240,219,120,0.005)";
+      index += 2;
+      ctx.fill();
+      ctx.restore();
+    }
+
+  }
+
+  // 重构数组的foreach函数
+  // todo: 学习原型链相关知识
+  Array.prototype.foreach = function(callback) {
+    for (var i = 0; i < this.length; i++) {
+      if (this[i] !== null) callback.apply(this[i], [i])
+    }
+  }
+
+  // 动画帧
+  var raf = window.requestAnimationFrame || window.webkitRequestAnimationFrame || window.mozRequestAnimationFrame || window.oRequestAnimationFrame || window.msRequestAnimationFrame || function(callback) {
+        window.setTimeout(callback, 1000 / 60);
+      };
+
+  // 监听鼠标点击事件，向鼠标点击位置发射烟花
+  canvas.onclick = function() {
+    var x = event.clientX;
+    var y = event.clientY;
+    var bigboom = new Boom(getRandom(canvas.width / 3, canvas.width * 2 / 3), 2, "#FFF", {x: x, y: y});
+    bigbooms.push(bigboom)
+  }
+
+  // 烟花类
+  var Boom = function(x, r, c, boomArea, shape) {
+    this.booms = [];//爆炸后的粒子
+    this.x = x;//x坐标
+    this.y = (canvas.height + r);//y坐标
+    this.r = r;//烟花爆炸之前头部半径
+    this.c = c;//颜色
+    this.shape = shape || false;//文字烟花爆炸后的文字内容
+    this.boomArea = boomArea;//爆炸点坐标
+    this.theta = 0;//发射角度
+    this.dead = false;
+    this.ba = parseInt(getRandom(80, 200));
+
+    var audio = document.getElementsByTagName("audio");
+    for (var i = 0; i < audio.length; i++) {
+      if (audio[i].src.indexOf("shotfire") >= 0 && (audio[i].paused || audio[i].ended)) {
+        audio[i].play();
+        break;
+      }
+    }
+  }
+  Boom.prototype = {
+    // todo: 深入理解 私有变量和私有函数
+    // 绘制
+    _paint: function() {
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.r, 0, 2 * Math.PI);
+      ctx.fillStyle = this.c;
+      ctx.fill();
+      ctx.restore();
+    },
+    // 移动
+    _move: function() {
+      // dx/dy为在x轴/y轴上烟花头部到爆炸点的距离
+      var dx = this.boomArea.x - this.x, dy = this.boomArea.y - this.y;
+      this.x = this.x + dx * 0.015;
+      this.y = this.y + dy * 0.015;
+
+      // 当距离小于ba时,让烟花发生爆炸，并将其dead属性置为true；否则绘制移动后的烟花头部实现动画效果
+      if (Math.abs(dx) <= this.ba && Math.abs(dy) <= this.ba) {
+        if (this.shape) {
+          this._shapBoom();
+        }
+        else this._boom();
+        this.dead = true;
+      }
+      else {
+        this._paint();
+      }
+    },
+    // 绘制光晕效果
+    _drawLight: function() {
+      ctx.save();
+      ctx.fillStyle = "rgba(255,228,150,0.3)";
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.r + 3 * Math.random() + 1, 0, 2 * Math.PI);
+      ctx.fill();
+      ctx.restore();
+    },
+    // 生成烟花爆炸后的粒子数组
+    _boom: function() {
+      var fragNum = getRandom(100, 300);//粒子数量
+      var style = getRandom(0, 10) >= 5 ? 1 : 2;//粒子颜色类型，1为随机同色粒子，2为随机彩色粒子
+      var color;
+      if (style === 1) {
+        color = {
+          a: parseInt(getRandom(128, 255)),
+          b: parseInt(getRandom(128, 255)),
+          c: parseInt(getRandom(128, 255))
+        }
+      }
+
+      var fanwei = fragNum;
+      var audio = document.getElementsByTagName("audio");
+      // 爆炸音效
+      for (var i = 0; i < audio.length; i++) {
+        if (audio[i].src.indexOf("boom") >= 0 && (audio[i].paused || audio[i].ended)) {
+          audio[i].play();
+          break;
+        }
+      }
+      for (var i = 0; i < fragNum; i++) {
+        // 为每个粒子重新生成颜色，实现彩色粒子效果
+        if (style === 2) {
+          color = {
+            a: parseInt(getRandom(128, 255)),
+            b: parseInt(getRandom(128, 255)),
+            c: parseInt(getRandom(128, 255))
+          }
+        }
+        // 粒子数量越多，爆炸范围越广，生成爆炸范围内的随机坐标
+        var a = getRandom(-Math.PI, Math.PI);
+        var x = getRandom(0, fanwei) * Math.cos(a) + this.x;
+        var y = getRandom(0, fanwei) * Math.sin(a) + this.y;
+        var radius = getRandom(0, 2)
+        var frag = new Frag(this.x, this.y, radius, color, x, y);
+        this.booms.push(frag);
+      }
+    },
+    _shapBoom: function() {
+      var that = this;
+      // 调用putValue函数，绘制文字烟花爆炸后的文字
+      putValue(ocas, octx, this.shape, 5, function(dots) {
+        var dx = canvas.width / 2 - that.x;
+        var dy = canvas.height / 2 - that.y;
+        for (var i = 0; i < dots.length; i++) {
+          color = {a: dots[i].a, b: dots[i].b, c: dots[i].c}
+          var x = dots[i].x;
+          var y = dots[i].y;
+          var radius = 1;
+          var frag = new Frag(that.x, that.y, radius, color, x - dx, y - dy);
+          that.booms.push(frag);
+        }
+      })
+    }
+  }
+
+  function putValue(canvas, context, ele, dr, callback) {
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    var img = new Image();
+    if (ele.innerHTML.indexOf("img") >= 0) {
+      img.src = ele.getElementsByTagName("img")[0].src;
+      imgload(img, function() {
+        context.drawImage(img, canvas.width / 2 - img.width / 2, canvas.height / 2 - img.width / 2);
+        dots = getimgData(canvas, context, dr);
+        callback(dots);
+      })
+    }
+    else {
+      var text = ele.innerHTML;
+      context.save();
+      var fontSize = 200;
+      context.font = fontSize + "px 宋体 bold";
+      context.textAlign = "center";
+      context.textBaseline = "middle";
+      context.fillStyle = "rgba(" + parseInt(getRandom(128, 255)) + "," + parseInt(getRandom(128, 255)) + "," + parseInt(getRandom(128, 255)) + " , 1)";
+      context.fillText(text, canvas.width / 2, canvas.height / 2);
+      context.restore();
+      dots = getimgData(canvas, context, dr);
+      callback(dots);
+    }
+  }
+
+  function imgload(img, callback) {
+    if (img.complete) {
+      callback.call(img);
+    }
+    else {
+      img.onload = function() {
+        callback.call(this);
+      }
+    }
+  }
+
+  function getimgData(canvas, context, dr) {
+    var imgData = context.getImageData(0, 0, canvas.width, canvas.height);
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    var dots = [];
+    for (var x = 0; x < imgData.width; x += dr) {
+      for (var y = 0; y < imgData.height; y += dr) {
+        var i = (y * imgData.width + x) * 4;
+        if (imgData.data[i + 3] > 128) {
+          var dot = {x: x, y: y, a: imgData.data[i], b: imgData.data[i + 1], c: imgData.data[i + 2]};
+          dots.push(dot);
+        }
+      }
+    }
+    return dots;
+  }
+
+  // 获取随机数：[a,b)
+  function getRandom(a, b) {
+    return Math.random() * (b - a) + a;
+  }
+
+
+  // 绘制背景：星星
+  var maxRadius = 1, stars = [];
+  function drawBg() {
+    for (var i = 0; i < 100; i++) {
+      var r = Math.random() * maxRadius;
+      var x = Math.random() * canvas.width;
+      var y = Math.random() * 2 * canvas.height - canvas.height;
+      var star = new Star(x, y, r);
+      stars.push(star);
+      star.paint()
+    }
+
+  }
+
+  var Star = function(x, y, r) {
+    this.x = x;
+    this.y = y;
+    this.r = r;
+  }
+  Star.prototype = {
+    paint: function() {
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.r, 0, 2 * Math.PI);
+      ctx.fillStyle = "rgba(255,255,255," + this.r + ")";
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+  // end：绘制背景：星星
+
+  // 烟花爆炸后的粒子
+  var focallength = 250;
+  var Frag = function(centerX, centerY, radius, color, tx, ty) {
+    this.tx = tx;//目标点y坐标
+    this.ty = ty;//目标点y坐标
+    this.x = centerX;//当前x坐标
+    this.y = centerY;//当前y坐标
+    this.dead = false;//是否死亡
+    this.centerX = centerX;//中心点（爆炸点/起始点）x坐标
+    this.centerY = centerY;//中心点（爆炸点/起始点）y坐标
+    this.radius = radius;//半径
+    this.color = color;//颜色
+  }
+
+  Frag.prototype = {
+    paint: function() {
+      // ctx.beginPath();
+      // ctx.arc(this.x , this.y , this.radius , 0 , 2*Math.PI);
+      ctx.fillStyle = "rgba(" + this.color.a + "," + this.color.b + "," + this.color.c + ",1)";
+      ctx.fillRect(this.x - this.radius, this.y - this.radius, this.radius * 2, this.radius * 2)
+    },
+    moveTo: function() {
+      // 模拟重力，使粒子在一定程度上下移
+      this.ty = this.ty + 0.3;
+      //计算距离
+      var dx = this.tx - this.x, dy = this.ty - this.y;
+      // 更新当前坐标
+      this.x = Math.abs(dx) < 0.1 ? this.tx : (this.x + dx * 0.1);
+      this.y = Math.abs(dy) < 0.1 ? this.ty : (this.y + dy * 0.1);
+      // 达到指定范围，粒子死亡
+      if (dx === 0 && Math.abs(dy) <= 80) {
+        this.dead = true;
+      }
+      this.paint();
+    }
+  }
+</script>
+</body>
+</html>
